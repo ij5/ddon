@@ -17,6 +17,8 @@ if(window.innerWidth > window.innerHeight) {
     canvas.style.width = '100%';
 }
 
+let ddon = PIXI.Sprite.from('ddon.bmp');
+
 let baseTexture = PIXI.BaseTexture.from('human.bmp');
 
 let standbyArray = [
@@ -51,11 +53,27 @@ function createCharacter(type: string, name: string, x: number) {
     standby.x = x;
     standby.y = type === 'dead' ? 396 : 398;
     standby.name = name;
+    if(name === 'main') standby.zIndex = 999;
     return standby;
 }
 
-app.stage.getChildByName('main')?.removeFromParent();
-app.stage.addChild(createCharacter('stand', 'main', 140));
+let state: {
+    [key: string]: {
+        x: number,
+        dead: boolean,
+        velocity: number,
+    }
+} = {};
+
+function addCharacter(name: string) {
+    app.stage.getChildByName(name)?.removeFromParent();
+    app.stage.addChild(createCharacter('stand', name, 140));
+    state[name] = {
+        dead: false,
+        velocity: 0,
+        x: 140,
+    }
+}
 
 let controlState: 'left' | 'right' | null = null;
 
@@ -82,49 +100,85 @@ window.addEventListener('keyup', (e) => {
     }
 });
 
-let state: {
-    [key: string]: {
-        x: number,
-        dead: boolean,
-        velocity: number,
-    }
-} = {};
 
-state['main'] = {
-    dead: false,
-    x: 140,
-    velocity: 0,
-}
+addCharacter('main');
 
 const VELOCITY_FACTOR = 1.5;
 
 let count = 0;
 
-app.ticker.add((dt)=>{
+function updateCharacter(dt: number, name: string) {
     if(controlState === 'right') {
-        state['main'].velocity += 0.3 * dt;
+        state[name].velocity += 0.2 * dt;
     }
     if(controlState === 'left') {
-        state['main'].velocity -= 0.3 * dt;
+        state[name].velocity -= 0.2 * dt;
     }
     if(controlState === null) {
-        state['main'].velocity /= 1.1 * dt;
+        state[name].velocity /= 1.05 * dt;
     }
     
-    
-    let currentPos = state['main'].x;
-    let velocity = state['main'].velocity;
+    let currentPos = state[name].x;
+    let velocity = state[name].velocity;
     currentPos += velocity;
     if(currentPos < WIDTH - 16) {
         if (currentPos < 4) {
-            currentPos = 3;
-            state['main'].velocity = Math.abs(velocity) / (VELOCITY_FACTOR * dt);
+            currentPos = 5;
+            state[name].velocity = Math.abs(velocity) / (VELOCITY_FACTOR * dt);
         }
     } else {
         currentPos = WIDTH - 16;
-        state['main'].velocity = -Math.abs(velocity) / (VELOCITY_FACTOR * dt);
+        state[name].velocity = -Math.abs(velocity) / (VELOCITY_FACTOR * dt);
     }
-    state['main'].x = currentPos;
+    state[name].x = currentPos;
+    app.stage.getChildByName(name)?.position.set(state[name].x, 398);
+}
+
+let ddonState: {
+    velocity: number,
+    sprite: PIXI.Sprite,
+}[] = [];
+
+function updateDdon(dt: number) {
+    ddonState.forEach((d, i) => {
+        d.sprite.y += d.velocity * dt * 0.02;
+        d.velocity += 0.8 * dt;
+        if(d.velocity < 100) d.velocity = 100
+        if(d.sprite.y > HEIGHT) {
+            d.sprite.destroy();
+            ddonState.splice(i, 1);
+        }
+        if(ddonState.length < 7) addDdon();
+    });
+}
+
+function addDdon() {
+    let d = ddons.addChild(PIXI.Sprite.from(ddon.texture));
+    d.x = Math.floor(Math.random() * WIDTH);
+    d.y = -Math.floor(Math.random() * 1000) - 10;
+    ddonState.push({
+        sprite: d,
+        velocity: 0,
+    });
+}
+
+let ddons = app.stage.addChild(new PIXI.Container());
+ddons.name = 'ddons';
+
+function stop() {
+    ddonState = [];
+    ddons.destroy({children: true});
+}
+
+function start() {
+    for(let i = 0; i < 7; i++) {
+        addDdon();
+    }
+}
+
+
+app.ticker.add((dt)=>{
     count += 1;
-    app.stage.getChildByName('main')?.position.set(state['main'].x, 398);
+    updateCharacter(dt, 'main');
+    updateDdon(dt);
 })
